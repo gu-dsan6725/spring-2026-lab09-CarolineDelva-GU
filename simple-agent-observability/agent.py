@@ -20,6 +20,8 @@ from opentelemetry.sdk.trace import TracerProvider
 from strands import Agent
 from strands.telemetry import StrandsTelemetry
 from strands.tools.decorator import tool
+from strands.tools.mcp import MCPClient
+from mcp.client.streamable_http import streamablehttp_client
 
 
 # Configure logging
@@ -43,6 +45,11 @@ def _get_env_var(
     if value is None:
         raise ValueError(f"Environment variable {key} not set")
     return value
+
+def create_streamable_http_transport():
+    return streamablehttp_client("https://mcp.context7.com/mcp")
+
+
 
 
 @tool
@@ -105,6 +112,23 @@ def _setup_observability() -> TracerProvider:
     return tracer_provider
 
 
+def _get_mcp_tools():
+    def create_transport():
+        return streamablehttp_client("https://mcp.context7.com/mcp")
+
+    client = MCPClient(create_transport)
+
+    try:
+        with client:
+            tools = client.list_tools_sync()
+            logger.info(f"Loaded {len(tools)} MCP tools")
+            return tools
+
+    except Exception as e:
+        logger.error(f"MCP failed: {e}")
+        return []
+
+
 def _create_agent() -> Agent:
     """
     Create and configure the Strands agent.
@@ -132,11 +156,16 @@ Always cite your sources when using search results."""
     # Create agent with Anthropic Claude 3 Haiku and DuckDuckGo tool
     # Use Anthropic model directly (not through Bedrock)
     # API key is already set in environment variable above
-    from strands.models import AnthropicModel
+    # from strands.models import AnthropicModel
 
-    model = AnthropicModel(
-        model_id="claude-3-haiku-20240307",
-        max_tokens=4096
+    # model = AnthropicModel(
+    #     model_id="claude-3-haiku-20240307",
+    #     max_tokens=4096
+    # )
+    from strands.models import LiteLLMModel
+
+    model = LiteLLMModel(
+        model_id="openai/gpt-4o-mini"
     )
 
     # Create agent - observability is already configured globally via TracerProvider
